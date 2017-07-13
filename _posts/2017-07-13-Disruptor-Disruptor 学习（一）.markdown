@@ -15,16 +15,16 @@ description: Markdown summary with different options
 
 ## Summary:
 
-You can pick as item to see how to apply in markdown.
+The LMAX Disruptor is a high performance inter-thread messaging library. It grew out of LMAX's research into concurrency, performance and non-blocking algorithms and today forms a core part of their Exchange's infrastructure.
 
-### Comum Elements
-- [Basic formatting](#basic-formatting)
-- [Headings](#headings)
-- [Lists](#lists)
-- [Paragraph Modifiers](#paragraph-modifiers)
-- [Urls](#urls)
-- [Horizontal Rule](#horizontal-rule)
-- [Images](#images)
+### 使用 Disruptor
+- [介绍](#basic-formatting)
+- [开始](#headings)
+- - [获取开始](#lists)
+- [基础的生产者和消费者](#paragraph-modifiers)
+- [基本的调节选项](#基本的调节选项)
+- [清理对象](#horizontal-rule)
+- [高级的方法](#images)
 - [Code](#code)
 
 ---
@@ -104,9 +104,27 @@ There are six levels of headings. They correspond with the six levels of HTML he
 
 ---
 
-## URLs
+## 基本的调节选项
 
-URLs can be made in a handful of ways:
+使用上述方法将在最广泛的部署场景中发挥作用。然而，如果你能够做出一定的假设，关于硬件和软件的干扰将运行在你可以利用一些优化选项来提高性能的环境。调优有2种主要方法：单对多生产者和可选等待策略。
+
+### 单生产者 VS 多生产者
+
+一个在concurrect系统提高性能的最好方式是按单个生产者的原则，这适用于干扰。如果你在这种情况下，永远只有一个单线程的事件产生的干扰，那么你可以利用这个来获得额外的性能。
+
+{% highlight java %}
+// Sticky Header
+public class LongEventMain
+{
+    public static void main(String[] args) throws Exception
+    {
+        //.....
+        // Construct the Disruptor with a SingleProducerSequencer
+        Disruptor<LongEvent> disruptor = new Disruptor(
+            factory, bufferSize, ProducerType.SINGLE, new BlockingWaitStrategy(), executor);
+        //.....
+    }
+}
 
 * A named link to [Mark It Down][3].
 * Another named link to [Mark It Down](http://markitdown.net/)
