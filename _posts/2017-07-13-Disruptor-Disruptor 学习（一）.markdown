@@ -21,7 +21,7 @@ The LMAX Disruptor is a high performance inter-thread messaging library. It grew
 - [介绍](#basic-formatting)
 - [开始](#headings)
 - - [获取开始](#lists)
-- [基础的生产者和消费者](#paragraph-modifiers)
+  - [基础的生产者和消费者](#paragraph-modifiers)
 - [基本的调节选项](#基本的调节选项)
 - [清理对象](#horizontal-rule)
 - [高级的方法](#images)
@@ -125,6 +125,7 @@ public class LongEventMain
         //.....
     }
 }
+{% endhighlight %}
 
 * A named link to [Mark It Down][3].
 * Another named link to [Mark It Down](http://markitdown.net/)
