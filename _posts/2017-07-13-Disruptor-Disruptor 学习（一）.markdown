@@ -141,7 +141,7 @@ Run 4, Disruptor=13,577,732 ops/sec
 Run 5, Disruptor=13,020,833 ops/sec
 Run 6, Disruptor=12,894,906 ops/sec
 
-{% highlight raw %}
+{% endhighlight %}
 
 ### 单生产者
 
@@ -154,7 +154,7 @@ Run 3, Disruptor=72,780,203 ops/sec
 Run 4, Disruptor=75,987,841 ops/sec
 Run 5, Disruptor=74,074,074 ops/sec
 Run 6, Disruptor=73,746,312 ops/sec
-{% highlight raw %}
+{% endhighlight %}
 
 ### 可选择的等待策略
 
