@@ -19,35 +19,24 @@ description: Markdown summary with different options
 
 　　现在有很多人写过关于Disruptor文章，但是我还是想写这篇浅析，毕竟不同人的理解是不同的，希望没接触过它的人能通过本文对Disruptor有个初步的了解，本文后面给出了一些相关链接供参考。
 
-### 使用 Disruptor
-- [介绍](#basic-formatting)
-- [开始](#headings)
-- - [获取开始](#lists)
-  - [基础的生产者和消费者](#paragraph-modifiers)
-- [基本的调节选项](#基本的调节选项)
-- [清理对象](#从环形缓冲区清理对象)
-- [高级的方法](#images)
-- [Code](#code)
-
----
-
 ## 什么是Disruptor？为什么速度更快？
 
 　　简单的说，Disruptor是一个高性能的Buffer，并提供了使用这个Buffer的框架。为什么说是它性能更好呢？这得从PCP和传统解决办法的缺点开始说起。
 
 　　我们知道，PCP又称Bounded-Buffer问题，其核心就是保证对一个Buffer的存取操作在多线程环境下不会出错。使用Java中的ArrayBlockingQueue和LinkedBlockingQueue类能轻松的完成PCP模型，这对于一般程序已经没问题了，但是对于并发度高、TPS要求较大的系统则不然。
 
-　　*BlockingQueue使用的是package java.util.concurrent.locks中实现的锁，当多个线程（例如生产者）同时写入Queue时，锁的争抢会导致只有一个生产者可以执行，其他线程都中断了，也就是线程的状态从RUNNING切换到BLOCKED，直到某个生产者线程使用完Buffer后释放锁，其他线程状态才从BLOCKED切换到RUNNABLE，然后时间片到其他线程后再进行锁的争抢。上述过程中，一般来说生产者存放一个数据到Buffer中所需时间是非常短的，操作系统切换线程上下文的速度也是非常快的，但是当线程数量增多后，OS切换线程所带来的开销逐渐增多，锁的反复申请和释放成为性能瓶颈。*BlockingQueue除了使用锁带来的性能损失外，还可能因为线程争抢的顺序问题造成性能再次损失：实际使用中发现线程的调度顺序并不理想，可能出现短时间内OS频繁调度出生产者或消费者的情况，这样造成缓冲区可能短时间内被填满或被清空的极端情况。（理想情况应该是缓冲区长度适中，生产和消费速度基本一致）
+　　BlockingQueue使用的是package java.util.concurrent.locks中实现的锁，当多个线程（例如生产者）同时写入Queue时，锁的争抢会导致只有一个生产者可以执行，其他线程都中断了，也就是线程的状态从RUNNING切换到BLOCKED，直到某个生产者线程使用完Buffer后释放锁，其他线程状态才从BLOCKED切换到RUNNABLE，然后时间片到其他线程后再进行锁的争抢。上述过程中，一般来说生产者存放一个数据到Buffer中所需时间是非常短的，操作系统切换线程上下文的速度也是非常快的，但是当线程数量增多后，OS切换线程所带来的开销逐渐增多，锁的反复申请和释放成为性能瓶颈。*BlockingQueue除了使用锁带来的性能损失外，还可能因为线程争抢的顺序问题造成性能再次损失：实际使用中发现线程的调度顺序并不理想，可能出现短时间内OS频繁调度出生产者或消费者的情况，这样造成缓冲区可能短时间内被填满或被清空的极端情况。（理想情况应该是缓冲区长度适中，生产和消费速度基本一致）
 
 　　对于上面的问题Disruptor的解决方案是：不用锁。
 ![Markdowm Image][7]
-　　Disruptor使用一个Ring Buffer存放生产者的“产品”，环形缓冲区实际上还是一段连续内存，之所以称作环形是因为它对数据存放位置的处理，生产者和消费者各有一个指针（数组下标），消费者的指针指向下一个要读取的Slot，生产者指针指向下一个要放入的Slot，消费或生产后，各自的指针值p = (p +1) % n，n是缓冲区长度，这样指针在缓冲区上反复游走，故可以将缓冲区看成环状。（如右图）（Ring Buffer并非Disruptor原创，Linux内核中就有环形缓冲区的实现。）使用Ring Buffer时：
+　　
+   Disruptor使用一个Ring Buffer存放生产者的“产品”，环形缓冲区实际上还是一段连续内存，之所以称作环形是因为它对数据存放位置的处理，生产者和消费者各有一个指针（数组下标），消费者的指针指向下一个要读取的Slot，生产者指针指向下一个要放入的Slot，消费或生产后，各自的指针值p = (p +1) % n，n是缓冲区长度，这样指针在缓冲区上反复游走，故可以将缓冲区看成环状。（如右图）（Ring Buffer并非Disruptor原创，Linux内核中就有环形缓冲区的实现。）使用Ring Buffer时：
 
-①当生产者和消费者都只有一个时，由于两个线程分别操作不同的指针，所以不需要锁。
+1. 当生产者和消费者都只有一个时，由于两个线程分别操作不同的指针，所以不需要锁。
 
-②当有多个消费者时，（按Disruptor的设计）每个消费者各自控制自己的指针，依次读取每个Slot（也就是每个消费者都会读取到所有的产品），这时只需要保证生产者指针不会超过最慢的消费者（超过最后一个消费者“一圈”）即可，也不需要锁。
+2. 当有多个消费者时，（按Disruptor的设计）每个消费者各自控制自己的指针，依次读取每个Slot（也就是每个消费者都会读取到所有的产品），这时只需要保证生产者指针不会超过最慢的消费者（超过最后一个消费者“一圈”）即可，也不需要锁。
 
-③当有多个生产者时，多个线程共用一个写指针，此处需要考虑多线程问题，例如两个生产者线程同时写数据，当前写指针=0，运行后其中一个线程应获得缓冲区0号Slot，另一个应该获得1号，写指针=2。对于这种情况，Disruptor使用CAS来保证多线程安全。
+3. 当有多个生产者时，多个线程共用一个写指针，此处需要考虑多线程问题，例如两个生产者线程同时写数据，当前写指针=0，运行后其中一个线程应获得缓冲区0号Slot，另一个应该获得1号，写指针=2。对于这种情况，Disruptor使用CAS来保证多线程安全。
 
 　　CAS(Compare and Swap/Set)是现在CPU普遍支持的一种指令（例如cmpxchg系类指令），CAS操作包含3个操作数：CAS(A,B,C)，其功能是：取地址A的值与B比较，如果相同，则将C赋值到地址A。CAS特点是它是由硬件实现的极轻量级指令，同时CPU也保证此操作的原子性。在考虑线程间同步问题时，可以使用Unsafe类的boolean compareAndSwapInt(java.lang.Object arg0, long arg1, int arg2, int arg3);系列方法，对于一个int变量（例如，Ring Buffer的写指针），使用CAS可以避免多线程访问带来的混乱，当compareAndSwap方法true时表明CAS操作成功赋值，返回false则表明地址A处的值并不等于B，此时重新试一遍即可，使用CAS移动写指针的逻辑如下：
 {% highlight java %}
@@ -92,11 +81,192 @@ public long next(int n)
 　　　　c)每个业务逻辑处理器是单线程的：你没有听错。其实有了a)b)作为前提，会发现多线程所带来的业务层面同步问题将会极大限制BLP效率、增大BLP的复杂度，和BLP的设计（Keep it simple, stupid.）相悖，如果实在想多线程，可以参照d)。
 
 　　　　d)使用多级业务逻辑处理器：有些像管道模式，上图的3块结构可以以多种方式组合，一个BLP可以将输出送往多个Output Disruptor，而这些Disruptor可能是另一些3块结构的Input Disruptor，即有些BLP是起到分发作用的，另一些是进行具体业务逻辑计算的。每个BLP对应一个线程，整个架构可能比上图复杂很多。
----
 
-## Headings
+## Hello Disruptor
 
-There are six levels of headings. They correspond with the six levels of HTML headings. You've probably noticed them already in the page. Each level down uses one more hash character. But we are using just 4 of them.
+　　Disruptor最初是由Java实现的，现在也有C/Cpp和.Net版本，Java版最全更新最快，代码注释较多比较好懂。说了这么多，本节先给出一个测试例子，展示Disruptor的基本用法，例子中用LinkedBlockingQueue和Disruptor分别实现了单一生产者+单一消费者存取简单对象的测试，统计了一下双方消耗的时间，仅供参考。
+
+　　例子中使用Disruptor 3.2.1。不同版本间的Disruptor一些术语可能有变化，在该版本中，缓冲区里的元素被称作Event，指针（缓冲区的下标）被称作Sequence，生产者的指针为RingBuffer.sequencer（private成员），消费者的指针通过ringBufferInstance.newBarrier()得到。
+
+{% highlight java %}
+//简单对象：缓冲区中的元素，里面只有一个value，提供setValue
+private class TestObj {
+    
+    public long value;
+    
+    public TestObj(long value)
+    {
+        this.value = value;
+    }
+    
+    public void setValue(long value)
+    {
+        this.value = value;
+    }
+    
+}
+
+public class Test {
+
+    //待生产的对象个数
+    final long objCount = 1000000;
+    final long bufSize;//缓冲区大小
+    {
+        bufSize = getRingBufferSize(objCount);
+    }
+    
+    //获取RingBuffer的缓冲区大小（2的幂次！加速计算）
+    static long getRingBufferSize(long num)
+    {
+        long s = 2;
+        while ( s < num )
+        {
+            s <<= 1;
+        }
+        return s;
+    }
+    
+    //使用LinkedBlockingQueue测试
+    public void testBlocingQueue() throws Exception
+    {
+        final LinkedBlockingQueue<TestObj> queue = new LinkedBlockingQueue<TestObj>();
+        Thread producer = new Thread(new Runnable() {//生产者
+            @Override
+            public void run() {
+                try{
+                    for ( long i=1;i<=objCount;i++ )
+                    {
+                        queue.put(new TestObj(i));//生产
+                    }
+                }catch ( InterruptedException e ){
+                }
+            }
+        });
+        Thread consumer = new Thread(new Runnable() {//消费者
+            @Override
+            public void run() {
+                try{
+                    TestObj readObj = null;
+                    for ( long i=1;i<=objCount;i++ )
+                    {
+                        readObj = queue.take();//消费
+                        //DoSomethingAbout(readObj);
+                    }
+                }catch ( InterruptedException e ){
+                }
+            }
+        });
+        
+        long timeStart = System.currentTimeMillis();//统计时间
+        producer.start();
+        consumer.start();
+        consumer.join();
+        producer.join();
+        long timeEnd = System.currentTimeMillis();
+        DecimalFormat df = (DecimalFormat) DecimalFormat.getInstance();
+        System.out.println((timeEnd - timeStart) + "/" + df.format(objCount) +
+                " = " + df.format(objCount/(timeEnd - timeStart)*1000) );
+    }
+    
+    //使用RingBuffer测试
+    public void testRingBuffer() throws Exception
+    {
+        //创建一个单生产者的RingBuffer，EventFactory是填充缓冲区的对象工厂
+        //            YieldingWaitStrategy等"等待策略"指出消费者等待数据变得可用前的策略
+        final RingBuffer<TestObj> ringBuffer = RingBuffer.createSingleProducer(new EventFactory<TestObj>() {
+            @Override
+            public TestObj newInstance() {
+                return new TestObj(0);
+            }
+        } , (int)bufSize, new YieldingWaitStrategy());
+        //创建消费者指针
+        final SequenceBarrier barrier = ringBuffer.newBarrier();
+        
+        Thread producer = new Thread(new Runnable() {//生产者
+            @Override
+            public void run() {
+                for ( long i=1;i<=objCount;i++ )
+                {
+                    long index = ringBuffer.next();//申请下一个缓冲区Slot
+                    ringBuffer.get(index).setValue(i);//对申请到的Slot赋值
+                    ringBuffer.publish(index);//发布，然后消费者可以读到
+                }
+            }
+        });
+        Thread consumer = new Thread(new Runnable() {//消费者
+            @Override
+            public void run() {
+                TestObj readObj = null;
+                int readCount = 0;
+                long readIndex = Sequencer.INITIAL_CURSOR_VALUE;
+                while ( readCount < objCount )//读取objCount个元素后结束
+                {
+                    try{
+                        long nextIndex = readIndex + 1;//当前读取到的指针+1，即下一个该读的位置
+                        long availableIndex = barrier.waitFor(nextIndex);//等待直到上面的位置可读取
+                        while ( nextIndex <= availableIndex )//从下一个可读位置到目前能读到的位置(Batch!)
+                        {
+                            readObj = ringBuffer.get(nextIndex);//获得Buffer中的对象
+                            //DoSomethingAbout(readObj);
+                            readCount++;
+                            nextIndex ++;
+                        }
+                        readIndex = availableIndex;//刷新当前读取到的位置
+                    }catch ( Exception ex)
+                    {
+                        ex.printStackTrace();
+                    }
+                }
+            }
+        });
+        
+        long timeStart = System.currentTimeMillis();//统计时间
+        producer.start();
+        consumer.start();
+        consumer.join();
+        producer.join();
+        long timeEnd = System.currentTimeMillis();
+        DecimalFormat df = (DecimalFormat) DecimalFormat.getInstance();
+        System.out.println((timeEnd - timeStart) + "/" + df.format(objCount) +
+                " = " + df.format(objCount/(timeEnd - timeStart)*1000) );
+        
+    }
+    
+    public static void main(String[] args) throws Exception {
+        Test ins = new Test();
+        //执行测试
+        ins.testBlocingQueue();
+        ins.testRingBuffer();
+    }
+
+}
+
+测试代码
+{% endhighlight %}
+
+测试结果：
+
+319/1,000,000 = 3,134,000 //使用LinkedBlockingQueue在319毫秒内存取100万个简单对象，每秒钟能执行313万个
+
+46/1,000,000 = 21,739,000 //使用Disruptor在46毫秒内存取100万个简单对象，每秒钟能执行2173万个
+
+平均下来使用Disruptor速度能提高7倍。（不同电脑、应用环境下结果可能不一致）
+
+## 随想：Disruptor、完成端口与Mechanical Sympathy
+
+{% highlight raw %}
+When pushing performance like this, it starts to become important to take account of the way modern hardware is constructed.
+
+　　　　　　　　　　　　　　　　　　　　　　—The LMAX Architecture
+{% endhighlight %}
+
+
+ 　　“当对性能的追求达到这样的程度，以致对现代硬件构成的理解变得越来越重要。”这句话恰当地形容了Disruptor/LMAX在对性能方面的追求和失败。咦，失败？为什么会这么说呢？Disruptor当然是一个优秀的框架，我说的失败指的是在开发它的过程中，LMAX曽试图提高并发程序效率，优化、使用锁或借助其他模型，但是这些尝试最终失败了——然后他们构建了Disruptor。再提问：一个Java程序员在尝试提高他的程序性能的时候，需要了解很多硬件知识吗？我想很多人都会回答“不需要”，构建Disruptor的过程中，最初开发人员对这个问题的回答可能也是“不需要”，但是尝试失败后他们决定另辟蹊径。总的看下Disruptor的设计：锁到CAS、缓冲行填充、避免GC等，我感觉这些设计都在刻意“迁就”或者“依赖”硬件设计，这些设计更像是一种“(ugly)hack”（毫无疑问，Disruptor还是目前最优秀的方案之一）。
+
+　　Disruptor我想到了完成端口，完成端口据说能是Windows上最快的并发网络“框架”：你只要通过API告诉Windows你想recv哪些socket，然后各个recv操作在内核层面上执行并加入到某个队列中，最后再使用Worker线程进行处理，大部分工作Windows都为你做好了，不使用锁也没有上下文切换和大量线程，是不是和Disruptor异曲同工呢？完成端口和Disruptor在追求性能时，都避免使用并行、锁、多线程等概念，这些概念的出现自有它们的原因，这里不用多说，但是为了性能（考虑到硬件）却不能充分使用它们，说明在处理并发、并行问题上，硬件和软件的发展存在不协调，可能冯氏计算机还是适合单“线程”顺序处理信息吧。关于这种不协调，我认为应该是硬件应该会逐步适应软件，但也有人提出了有意思的Mechanical Sympathy（链接[6]），至于未来会如何发展就不是这篇blog能讨论的了:) 。
+
+（完）
+
 
 # Headings can be small
 
