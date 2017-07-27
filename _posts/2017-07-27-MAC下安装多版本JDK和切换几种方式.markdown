@@ -17,17 +17,6 @@ description: Markdown summary with different options
 
 MAC AIR,OS X 10.12.5,64位
 
-### Comum Elements
-- [Basic formatting](#basic-formatting)
-- [Headings](#headings)
-- [Lists](#lists)
-- [Paragraph Modifiers](#paragraph-modifiers)
-- [Urls](#urls)
-- [Horizontal Rule](#horizontal-rule)
-- [Images](#images)
-- [Code](#code)
-
----
 
 ## 历史：
 
@@ -50,14 +39,14 @@ dmg安装包，安装过程如一般程序，略
 
 ## 最终安装目录(版本号根据情况略有不同)：
 
-# JDK 1.6：
+#### JDK 1.6：
 /Library/Java/JavaVirtualMachines/1.6.0.jdk
  
-# JDK 1.7&1.8:
+#### JDK 1.7&1.8:
 /Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk
 /Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk
 
-## 推荐方式A：
+### 推荐方式A：
 
 1. 安装jenv
 执行：curl -s get.jenv.io | bash
@@ -83,7 +72,7 @@ ln -s /Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/bin ~/.je
 2. 切换版本：jenv use java 1.8
 3. 设置缺少版本：jenv default java 1.6
 
-## 推荐方式B(测试不行.bash_profile不能写入和创建)：
+### 推荐方式B(测试不行.bash_profile不能写入和创建)：
 
 1. 安装jenv
 执行：curl -s get.jenv.io | bash
@@ -115,12 +104,12 @@ alias jdk8="export JAVA_HOME=$JAVA_8_HOME"
 
 ---
 
-## 其他分析：
+### 其他分析：
 1. 打开终端输入执行：which java，显示/usr/bin/java
 2. 执行cd /usr/bin/，再执行ls -ll |grep java，可看到java此命令是link到/System/Library/Frameworks/JavaVM.framework/Versions/Current/Commands/java
 3. 执行：cd /System/Library/Frameworks/JavaVM.framework/Versions/ 进入后，再执行ls -ll，可看到Current -> A，也就是Current目录link到A目录。而A目录在安装第一个JDK时就存在，用来JDK多版本管理使用的（猜测是使用到JAVA_HOME）。
 
-# 另外：
+#### 另外：
 /System/Library/Frameworks/JavaVM.framework/Versions/ 下有多个不同（低）版本的目录，但它们链接的都是 CurrentJDK 目录。总之，这些Java都是苹果提供的Java，Oracle 或 OpenJDK 提供的 Java 不在此目录中。
 据说以前可在系统设置中“Java Preferences”对话框可设置当前jdk，再自动调整A目录内容，但我没看到过。
 Java 7 需要 Mac OS X 10.7.3 (Lion) 及以上版本才能安装。在浏览器中运行Java要求是64位浏览器，所以不支持Chrome， Safari 或 Firefox 没问题。
