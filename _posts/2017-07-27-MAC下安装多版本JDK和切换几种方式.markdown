@@ -1,0 +1,127 @@
+---
+title: "MAC下安装多版本JDK和切换几种方式"
+layout: post
+date: 2017-07-27 09:18
+image: /assets/images/markdown.jpg
+headerImage: false
+tag:
+- jdk
+- osx
+star: true
+category: blog
+author: sun
+description: Markdown summary with different options
+---
+
+## 环境：
+
+MAC AIR,OS X 10.12.5,64位
+
+### Comum Elements
+- [Basic formatting](#basic-formatting)
+- [Headings](#headings)
+- [Lists](#lists)
+- [Paragraph Modifiers](#paragraph-modifiers)
+- [Urls](#urls)
+- [Horizontal Rule](#horizontal-rule)
+- [Images](#images)
+- [Code](#code)
+
+---
+
+## 历史：
+
+过去 Mac 上的 Java 都是由 Apple 自己提供，只支持到 Java 6，并且OS X 10.7 开始系统并不自带（而是可选安装）（原自带的是1.6）。
+后来 Apple 加入 OpenJDK 继续支持 Java 6，而 Java 7 将由 Oracle 负责提供。
+
+在终端中输入java -version可查看当前JDK版本信息，如果还没安装任一JDK，就会提示安装，点击后会跳到oralce java的下载网页。
+
+---
+
+## 安装包(注意都是下载mac下的dmg安装包)：
+
+JDK 1.6（验证OS X 10.12.5可用）：[JDK 1.6下载](http://support.apple.com/kb/DL1572)
+
+JDK 1.7&1.8（1.7在页面下方）: [JDK 1.7&1.8下载](http://www.oracle.com/technetwork/cn/java/javase/downloads/index.html)
+
+## 安装：
+
+dmg安装包，安装过程如一般程序，略
+
+## 最终安装目录(版本号根据情况略有不同)：
+
+# JDK 1.6：
+/Library/Java/JavaVirtualMachines/1.6.0.jdk
+ 
+# JDK 1.7&1.8:
+/Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk
+/Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk
+
+## 推荐方式A：
+
+1. 安装jenv
+执行：curl -s get.jenv.io | bash
+jenv参考（关键是方便别的java工具管理）：https://github.com/linux-china/jenv/wiki/Chinese-Introduction
+2. 进入jenv目录,然后建相关目录：
+{% highlight raw %}
+cd ~/.jenv/candidates/  
+mkdir java  
+cd java  
+mkdir 1.6  
+mkdir 1.7  
+mkdir 1.8 
+{% endhighlight %}
+3. 执行以下命令：
+{% highlight raw %}
+ln -s /Library/Java/JavaVirtualMachines/1.6.0.jdk/Contents/Home/bin ~/.jenv/candidates/java/1.6  
+ln -s /Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/bin ~/.jenv/candidates/java/1.7  
+ln -s /Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/bin ~/.jenv/candidates/java/1.8 
+{% endhighlight %}
+
+大功告成：
+1. 最先默认的jdk一般是你最后安装的那jdk。
+2. 切换版本：jenv use java 1.8
+3. 设置缺少版本：jenv default java 1.6
+
+## 推荐方式B(测试不行.bash_profile不能写入和创建)：
+
+1. 安装jenv
+执行：curl -s get.jenv.io | bash
+jenv参考（关键是方便别的java工具管理）：https://github.com/linux-china/jenv/wiki/Chinese-Introduction
+2. 进入jenv目录,然后建相关目录：
+{% highlight raw %}
+vi .bash_profile 输入以下内容  
+然后执行source .bash_profile生效新配置 
+{% endhighlight %}
+3. 执行以下命令：
+{% highlight raw %}
+# Mac默认 JDK 6（Mac默认自带了一个jdk6版本）  
+export JAVA_6_HOME=`/usr/libexec/java_home -v 1.6`  
+# 设置 JDK 7  
+export JAVA_7_HOME=`/usr/libexec/java_home -v 1.7`  
+# 设置 JDK 8  
+export JAVA_8_HOME=`/usr/libexec/java_home -v 1.8`  
+  
+#默认JDK 6  
+export JAVA_HOME=$JAVA_6_HOME  
+  
+#alias命令动态切换JDK版本  
+alias jdk6="export JAVA_HOME=$JAVA_6_HOME"  
+alias jdk7="export JAVA_HOME=$JAVA_7_HOME"  
+alias jdk8="export JAVA_HOME=$JAVA_8_HOME"  
+{% endhighlight %}
+
+默认jdk为1.6,执行jdk6或jdk7或jdk8后，通过java -version可看到已切换成相应版本。
+
+---
+
+## 其他分析：
+1. 打开终端输入执行：which java，显示/usr/bin/java
+2. 执行cd /usr/bin/，再执行ls -ll |grep java，可看到java此命令是link到/System/Library/Frameworks/JavaVM.framework/Versions/Current/Commands/java
+3. 执行：cd /System/Library/Frameworks/JavaVM.framework/Versions/ 进入后，再执行ls -ll，可看到Current -> A，也就是Current目录link到A目录。而A目录在安装第一个JDK时就存在，用来JDK多版本管理使用的（猜测是使用到JAVA_HOME）。
+
+# 另外：
+/System/Library/Frameworks/JavaVM.framework/Versions/ 下有多个不同（低）版本的目录，但它们链接的都是 CurrentJDK 目录。总之，这些Java都是苹果提供的Java，Oracle 或 OpenJDK 提供的 Java 不在此目录中。
+据说以前可在系统设置中“Java Preferences”对话框可设置当前jdk，再自动调整A目录内容，但我没看到过。
+Java 7 需要 Mac OS X 10.7.3 (Lion) 及以上版本才能安装。在浏览器中运行Java要求是64位浏览器，所以不支持Chrome， Safari 或 Firefox 没问题。
+ 
