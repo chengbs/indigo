@@ -1,0 +1,366 @@
+---
+title: "MINA 学习（一）"
+layout: post
+date: 2016-02-24 22:44
+image: /assets/images/markdown.jpg
+headerImage: false
+tag:
+- MINA
+- client
+star: true
+category: blog
+author: sun
+description: Markdown summary with different options
+---
+
+## 总结:
+
+Apache Mina Server 是一个网络通信应用框架，也就是说，它主要是对基于TCP/IP、UDP/IP协议栈的通信框架（当然，也可以提供JAVA 对象的序列化服务、虚拟机管道通信服务等），Mina 可以帮助我们快速开发高性能、高扩展性的网络通信应用，Mina 提供了事件驱动、异步（Mina 的异步IO 默认使用的是JAVA NIO 作为底层支持）操作的编程模型。Mina 主要有1.x 和2.x 两个分支，这里我们讲解最新版本2.0，如果你使用的是Mina 1.x，那么可能会有一些功能并不适用。学习本文档，需要你已掌握JAVA IO、JAVA NIO、JAVASocket、JAVA 线程及并发库(java.util.concurrent.*)的知识。Mina 同时提供了网络通信的Server 端、Client 端的封装，无论是哪端，Mina 在整个网通通信结构中都处于如下的位置：可见Mina 的API 将真正的网络通信与我们的应用程序隔离开来，你只需要关心你要发送、接收的数据以及你的业务逻辑即可。同样的，无论是哪端，Mina 的执行流程如下所示：
+
+1. IoService：这个接口在一个线程上负责套接字的建立，拥有自己的Selector，监听是否有连接被建立。
+2. IoProcessor：这个接口在另一个线程上，负责检查是否有数据在通道上读写，也就是说它也拥有自己的Selector，这是与我们使用Java NIO 编码时的一个不同之处，通常在java NIO 编码中，我们都是使用一个Selector，也就是不区分IoService与IoProcessor 两个功能接口。另外，IoProcessor 负责调用注册在IoService 上的过滤器，并在过滤器链之后调用IoHandler。
+3. IoFilter：这个接口定义一组拦截器，这些拦截器可以包括日志输出、黑名单过滤、数据的编码（write 方向）与解码（read 方向）等功能，其中数据的encode 与decode是最为重要的、也是你在使用Mina 时最主要关注的地方。
+4. IoHandler：这个接口负责编写业务逻辑，也就是接收、发送数据的地方。
+
+---
+
+## 简单的TCPServer：
+
+1. 第一步：编写IoService
+
+按照上面的执行流程，我们首先需要编写IoService，IoService 本身既是服务端，又是客户端，我们这里编写服务端，所以使用IoAcceptor 实现，由于IoAcceptor 是与协议无关的，因为我们要编写TCPServer，所以我们使用IoAcceptor 的实现NioSocketAcceptor，实际上底层就是调用Java.nio.channels.ServerSocketChannel 类。当然，如果你使用了Apache 的APR 库，那么你可以选择使AprSocketAcceptor 作为TCPServer 的实现，据传说Apache APR库的性能比JVM 自带的本地库高出很多。那么IoProcessor 是由指定的IoService 内部创建并调用的，我们并不需要关心。
+
+{% highlight java %}
+IoAcceptor acceptor=new NioSocketAcceptor();    
+acceptor.getSessionConfig().setReadBufferSize(2048);    
+acceptor.getSessionConfig.setIdleTime(IdleStatus.BOTH_IDLE,10);    
+acceptor.bind(new InetSocketAddress(9123)); 
+{% endhighlight %}
+
+这段代码我们初始化了服务端的TCP/IP 的基于NIO 的套接字，然后调用IoSessionConfig设置读取数据的缓冲区大小、读写通道均在10 秒内无任何操作就进入空闲状态。
+
+2. 第二步：编写过滤器
+
+这里我们处理最简单的字符串传输，Mina 已经为我们提供了TextLineCodecFactory 编解码器工厂来对字符串进行编解码处理。
+
+{% highlight java %}
+acceptor.getFilterChain().addLast("codec",  new ProtocolCodecFilter(new TextLineCodecFactory(  
+Charset.forName("UTF-8"),  
+LineDelimiter.WINDOWS.getValue(),
+LineDelimiter.WINDOWS.getValue()))  
+); 
+{% endhighlight %} 
+
+这段代码要在acceptor.bind()方法之前执行，因为绑定套接字之后就不能再做这些准备工作了。这里先不用清楚编解码器是如何工作的，这个是后面重点说明的内容，这里你只需要清楚，我们传输的以换行符为标识的数据，所以使用了Mina 自带的换行符编解码器工厂。
+
+3. 第三步：编写IoHandler
+
+这里我们只是简单的打印Client 传说过来的数据。
+
+{% highlight java %}
+public class MyIoHandler extends IoHandlerAdapter {  
+// 这里我们使用的SLF4J作为日志门面，至于为什么在后面说明。  
+private final static Logger log = LoggerFactory  
+.getLogger(MyIoHandler.class);  
+@Override  
+public void messageReceived(IoSession session, Object message)  
+throws Exception {  
+String str = message.toString();  
+log.info("The message received is [" + str + "]");  
+if (str.endsWith("quit")) {  
+session.close(true);  
+return;  
+}  
+}  
+}   
+{% endhighlight %} 
+
+然后我们把这个IoHandler 注册到IoService：
+
+{% highlight java %}
+acceptor.setHandler(new MyIoHandler());     
+{% endhighlight %} 
+
+当然这段代码也要在acceptor.bind()方法之前执行。然后我们运行MyServer 中的main 方法，你可以看到控制台一直处于阻塞状态，此时，我们用telnet 127.0.0.1 9123 访问，然后输入一些内容，当按下回车键，你会发现数据在Server 端被输出，但要注意不要输入中文，因为Windows 的命令行窗口不会对传输的数据进行UTF-8 编码。当输入quit 结尾的字符串时，连接被断开。这里注意你如果使用的操作系统，或者使用的Telnet 软件的换行符是什么，如果不清楚，可以删掉第二步中的两个红色的参数，使用TextLineCodec 内部的自动识别机制。
+
+---
+
+## 简单的TCPClient：
+
+这里我们实现Mina 中的TCPClient，因为前面说过无论是Server 端还是Client 端，在Mina中的执行流程都是一样的。唯一不同的就是IoService 的Client 端实现是IoConnector。
+
+1. 第一步：编写IoService并注册过滤器
+
+{% highlight java %}
+public class MyClient {  
+main方法：  
+IoConnector connector=new NioSocketConnector();  
+connector.setConnectTimeoutMillis(30000);  
+connector.getFilterChain().addLast("codec",  
+new ProtocolCodecFilter(  
+new TextLineCodecFactory(  
+Charset.forName("UTF-8"),  
+LineDelimiter.WINDOWS.getValue(),  
+LineDelimiter.WINDOWS.getValue()  
+)  
+)  
+);  
+connector.connect(new InetSocketAddress("localhost", 9123));  
+}    
+{% endhighlight %} 
+
+2. 第二步：编写IoHandler
+
+{% highlight java %}
+public class ClientHandler extends IoHandlerAdapter {    
+private final static Logger LOGGER = LoggerFactory    
+.getLogger(ClientHandler.class);    
+private final String values;    
+public ClientHandler(String values) {    
+this.values = values;    
+}    
+@Override    
+public void sessionOpened(IoSession session) {    
+session.write(values);    
+}    
+}  
+{% endhighlight %} 
+
+3. 第三步：注册IoHandler
+
+{% highlight java %}
+connector.setHandler(new ClientHandler("你好！\r\n 大家好！"));   
+{% endhighlight %} 
+
+然后我们运行MyClient，你会发现MyServer 输出如下语句：
+The message received is [你好！]
+The message received is [大家好！]
+我们看到服务端是按照收到两条消息输出的，因为我们用的编解码器是以换行符判断数据是否读取完毕的。
+
+---
+
+## 介绍Mina的TCP的主要接口：
+
+URLs can be made in a handful of ways:
+
+* A named link to [Mark It Down][3].
+* Another named link to [Mark It Down](http://markitdown.net/)
+* Sometimes you just want a URL like <http://markitdown.net/>.
+
+{% highlight raw %}
+* A named link to [MarkItDown][3].
+* Another named link to [MarkItDown](http://markitdown.net/)
+* Sometimes you just want a URL like <http://markitdown.net/>.
+{% endhighlight %}
+
+---
+
+### Comum Elements
+- [Basic formatting](#basic-formatting)
+- [Headings](#headings)
+- [Lists](#lists)
+- [Paragraph Modifiers](#paragraph-modifiers)
+- [Urls](#urls)
+- [Horizontal Rule](#horizontal-rule)
+- [Images](#images)
+- [Code](#code)
+
+---
+
+## 多路分离的解码器：
+
+假设一段数据发送过来之后，需要根据某种条件决定使用哪个解码器，而不是像上面的例子，固定使用一个解码器，那么该如何做呢？幸好Mina 提供了org.apache.mina.filter.codec.demux 包来完成这种多路分离（Demultiplexes）的解码工作，也就是同时注册多个解码器，然后运行时依据传入的数据决定到底使用哪个解码器来工作。所谓多路分离就是依据条件分发到指定的解码器，譬如：上面的短信协议进行扩展，可以依据状态行来判断使用1.0 版本的短信协议解码器还是2.0版本的短信协议解码器。
+
+下面我们使用一个简单的例子，说明这个多路分离的解码器是如何使用的，需求如下所示：
+
+1. 客户端传入两个int 类型的数字，还有一个char 类型的符号。
+2. 如果符号是+，服务端就是用1 号解码器，对两个数字相加，然后把结果返回给客户端。
+3. 如果符号是-，服务端就使用2 号解码器，将两个数字变为相反数，然后相加，把结果返回给客户端。
+
+{% highlight html %}
+This note **demonstrates** some of what [Markdown][some/link] is *capable of doing*.
+{% endhighlight %}
+
+---
+
+## Headings
+
+There are six levels of headings. They correspond with the six levels of HTML headings. You've probably noticed them already in the page. Each level down uses one more hash character. But we are using just 4 of them.
+
+# Headings can be small
+
+## Headings can be small
+
+### Headings can be small
+
+#### Headings can be small
+
+{% highlight raw %}
+# Heading
+## Heading
+### Heading
+#### Heading
+{% endhighlight %}
+
+---
+
+## Lists
+
+### Ordered list
+
+1. Item 1
+2. A second item
+3. Number 3
+
+{% highlight raw %}
+1. Item 1
+2. A second item
+3. Number 3
+{% endhighlight %}
+
+### Unordered list
+
+* An item
+* Another item
+* Yet another item
+* And there's more...
+
+{% highlight raw %}
+* An item
+* Another item
+* Yet another item
+* And there's more...
+{% endhighlight %}
+
+---
+
+## Paragraph modifiers
+
+### Quote
+
+> Here is a quote. What this is should be self explanatory. Quotes are automatically indented when they are used.
+
+{% highlight raw %}
+> Here is a quote. What this is should be self explanatory.
+{% endhighlight raw %}
+
+---
+
+## URLs
+
+URLs can be made in a handful of ways:
+
+* A named link to [Mark It Down][3].
+* Another named link to [Mark It Down](http://markitdown.net/)
+* Sometimes you just want a URL like <http://markitdown.net/>.
+
+{% highlight raw %}
+* A named link to [MarkItDown][3].
+* Another named link to [MarkItDown](http://markitdown.net/)
+* Sometimes you just want a URL like <http://markitdown.net/>.
+{% endhighlight %}
+
+---
+
+## Horizontal rule
+
+A horizontal rule is a line that goes across the middle of the page.
+It's sometimes handy for breaking things up.
+
+{% highlight raw %}
+---
+{% endhighlight %}
+
+---
+
+## Images
+
+Markdown can also contain images. I'll need to add something here sometime.
+
+{% highlight raw %}
+![Markdowm Image][/image/url]
+{% endhighlight %}
+
+![Markdowm Image][6]
+
+*Figure Caption*?
+
+{% highlight raw %}
+![Markdowm Image][/image/url]
+<figcaption class="caption">Photo by John Doe</figcaption>
+{% endhighlight %}
+
+![Markdowm Image][6]
+<figcaption class="caption">Photo by John Doe</figcaption>
+
+*Bigger Images*?
+
+{% highlight raw %}
+![Markdowm Image][/image/url]{: class="bigger-image" }
+{% endhighlight %}
+
+![Markdowm Image][6]{: class="bigger-image" }
+
+---
+
+## Code
+
+A HTML Example:
+
+{% highlight html %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Just a test</h1>
+</body>
+</html>
+{% endhighlight %}
+
+A CSS Example:
+
+{% highlight css %}
+pre {
+    padding: 10px;
+    font-size: .8em;
+    white-space: pre;
+}
+
+pre, table {
+    width: 100%;
+}
+
+code, pre, tt {
+    font-family: Monaco, Consolas, Inconsolata, monospace, sans-serif;
+    background: rgba(0,0,0,.05);
+}
+{% endhighlight %}
+
+A JS Example:
+
+{% highlight js %}
+// Sticky Header
+$(window).scroll(function() {
+
+    if ($(window).scrollTop() > 900 && !$("body").hasClass('show-menu')) {
+        $('#hamburguer__open').fadeOut('fast');
+    } else if (!$("body").hasClass('show-menu')) {
+        $('#hamburguer__open').fadeIn('fast');
+    }
+
+});
+{% endhighlight %}
+
+[1]: http://daringfireball.net/projects/markdown/
+[2]: http://www.fileformat.info/info/unicode/char/2163/index.htm
+[3]: http://www.markitdown.net/
+[4]: http://daringfireball.net/projects/markdown/basics
+[5]: http://daringfireball.net/projects/markdown/syntax
+[6]: http://kune.fr/wp-content/uploads/2013/10/ghost-blog.jpg
+
+http://blog.csdn.net/w13770269691/article/details/8614584
+http://blog.csdn.net/c1481118216/article/details/52826250
+http://www.cnblogs.com/zzt-lovelinlin/p/5292608.html
