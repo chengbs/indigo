@@ -13,6 +13,18 @@ author: sun
 description: Markdown summary with different options
 ---
 
+### Comum Elements
+- [总结](#总结:)
+- [简单的TCPServer](#简单的TCPServer：)
+- [简单的TCPClient](#简单的TCPClient：)
+- [Paragraph Modifiers](#paragraph-modifiers)
+- [Urls](#urls)
+- [Horizontal Rule](#horizontal-rule)
+- [Images](#images)
+- [Code](#code)
+
+---
+
 ## 总结:
 
 Apache Mina Server 是一个网络通信应用框架，也就是说，它主要是对基于TCP/IP、UDP/IP协议栈的通信框架（当然，也可以提供JAVA 对象的序列化服务、虚拟机管道通信服务等），Mina 可以帮助我们快速开发高性能、高扩展性的网络通信应用，Mina 提供了事件驱动、异步（Mina 的异步IO 默认使用的是JAVA NIO 作为底层支持）操作的编程模型。Mina 主要有1.x 和2.x 两个分支，这里我们讲解最新版本2.0，如果你使用的是Mina 1.x，那么可能会有一些功能并不适用。学习本文档，需要你已掌握JAVA IO、JAVA NIO、JAVASocket、JAVA 线程及并发库(java.util.concurrent.*)的知识。Mina 同时提供了网络通信的Server 端、Client 端的封装，无论是哪端，Mina 在整个网通通信结构中都处于如下的位置：可见Mina 的API 将真正的网络通信与我们的应用程序隔离开来，你只需要关心你要发送、接收的数据以及你的业务逻辑即可。同样的，无论是哪端，Mina 的执行流程如下所示：
@@ -472,17 +484,110 @@ ProtocolDecoder getDecoder(IoSession session) throws Exception;
 
 ---
 
-### Comum Elements
-- [Basic formatting](#basic-formatting)
-- [Headings](#headings)
-- [Lists](#lists)
-- [Paragraph Modifiers](#paragraph-modifiers)
-- [Urls](#urls)
-- [Horizontal Rule](#horizontal-rule)
-- [Images](#images)
-- [Code](#code)
+#### 简单的编解码器示例：
+下面我们举一个模拟电信运营商短信协议的编解码器实现，假设通信协议如下所示：
+M sip:wap.fetion.com.cn SIP-C/2.0
+S: 1580101xxxx
+R: 1889020xxxx
+
+ 
+
+L: 21
+Hello World!
+这里的第一行表示状态行，一般表示协议的名字、版本号等，第二行表示短信的发送号码，第三行表示短信接收的号码，第四行表示短信的字节数，最后的内容就是短信的内容。上面的每一行的末尾使用ASC II 的10（/n）作为换行符，因为这是纯文本数据，协议要
+求双方使用UTF-8 对字符串编解码。实际上如果你熟悉HTTP 协议，上面的这个精简的短信协议和HTTP 协议的组成是非常像的，第一行是状态行，中间的是消息报头，最后面的是消息正文。在解析这个短信协议之前，你需要知晓TCP 的一个事项，那就是数据的发送没有规模性，所谓的规模性就是作为数据的接收端，不知道到底什么时候数据算是读取完毕，所以应用层协议在制定的时候，必须指定数据读取的截至点。一般来说，有如下三种方式设置数据读取的长度：
+1. 使用分隔符，譬如：TextLine 编解码器。你可以使用/r、/n、NUL 这些ASC II 中的特殊的字符来告诉数据接收端，你只要遇见分隔符，就表示数据读完了，不用在那里傻等着不知道还有没有数据没读完啊？我可不可以开始把已经读取到的字节解码为指定的数据类型了啊？
+2. 定长的字节数，这种方式是使用长度固定的数据发送，一般适用于指令发送，譬如：数据发送端规定发送的数据都是双字节，AA 表示启动、BB 表示关闭等等。
+3. 在数据中的某个位置使用一个长度域，表示数据的长度，这种处理方式最为灵活，上面的短信协议中的那个L 就是短信文字的字节数，其实HTTP 协议的消息报头中的Content-Length 也是表示消息正文的长度，这样数据的接收端就知道我到底读到多长的
+字节数就表示不用再读取数据了。相比较解码（字节转为JAVA 对象，也叫做拆包）来说，编码（JAVA 对象转为字节，也叫做打包）就很简单了，你只需要把JAVA 对象转为指定格式的字节流，write()就可以了。下面我们开始对上面的短信协议进行编解码处理。
+
+第一步，协议对象：
+
+{% highlight java %}
+public class SmsObject {
+	private String sender;// 短信发送者
+	private String receiver;// 短信接受者
+	private String message;// 短信内容
+
+	public String getSender() {
+		return sender;
+	}
+
+	public void setSender(String sender) {
+		this.sender = sender;
+	}
+
+	public String getReceiver() {
+		return receiver;
+	}
+
+	public void setReceiver(String receiver) {
+		this.receiver = receiver;
+	}
+
+	public String getMessage() {
+		return message;
+	}
+
+	public void setMessage(String message) {
+		this.message = message;
+	}
+}
+{% endhighlight %}
+
+
+第二步，编码器：
+在Mina 中编写编码器可以实现ProtocolEncoder，其中有encode()、dispose()两个方法需要实现。这里的dispose()方法用于在销毁编码器时释放关联的资源，由于这个方法一般我们并不关心，所以通常我们直接继承适配器ProtocolEncoderAdapter。
+
+{% endhighlight java%}
+public class CmccSipcEncoder extends ProtocolEncoderAdapter {
+    private final Charset charset;
+
+    public CmccSipcEncoder(Charset charset) {
+        this.charset = charset;
+    }
+
+    @Override
+    public void encode(IoSession session, Object message,
+        ProtocolEncoderOutput out) throws Exception {
+        SmsObject sms = (SmsObject) message;
+        CharsetEncoder ce = charset.newEncoder();
+        IoBuffer buffer = IoBuffer.allocate(100).setAutoExpand(true);
+        String statusLine = "M sip:wap.fetion.com.cn SIP-C/2.0";
+        String sender = sms.getSender();
+        String receiver = sms.getReceiver();
+        String smsContent = sms.getMessage();
+        buffer.putString(statusLine + "/n", ce);
+        buffer.putString("S: " + sender + "/n", ce);
+        buffer.putString("R: " + receiver + "/n", ce);
+        buffer.putString("L: " + (smsContent.getBytes(charset).length) + "/n",
+            ce);
+        buffer.putString(smsContent, ce);
+        buffer.flip();
+        out.write(buffer);
+    }
+}
+{% endhighlight %}
+
+这里我们依据传入的字符集类型对message 对象进行编码，编码的方式就是按照短信协议拼装字符串到IoBuffer 缓冲区，然后调用ProtocolEncoderOutput 的write()方法输出字节流。这里要注意生成短信内容长度时的红色代码，我们使用String 类与Byte[]类型之间的转换方法获得转为字节流后的字节数。
+解码器的编写有以下几个步骤：
+1. 将 encode()方法中的message 对象强制转换为指定的对象类型；
+2. 创建IoBuffer 缓冲区对象，并设置为自动扩展；
+3. 将转换后的message 对象中的各个部分按照指定的应用层协议进行组装，并put()到IoBuffer 缓冲区；
+4. 当你组装数据完毕之后，调用flip()方法，为输出做好准备，切记在write()方法之前，要调用IoBuffer 的flip()方法，否则缓冲区的position 的后面是没有数据可以用来输出的，你必须调用flip()方法将position 移至0，limit 移至刚才的position。这个flip()方法的含义请参看java.nio.ByteBuffer。
+5. 最后调用ProtocolEncoderOutput 的write()方法输出IoBuffer 缓冲区实例。
+
+第三步，解码器：
+在Mina 中编写解码器，可以实现ProtocolDecoder 接口，其中有decode()、finishDecode()、dispose()三个方法。这里的finishDecode()方法可以用于处理在IoSession 关闭时剩余的未读取数据，一般这个方法并不会被使用到，除非协议中未定义任何标识数据什么时候截止的约定，譬如：Http 响应的Content-Length 未设定，那么在你认为读取完数据后，关闭TCP连接（IoSession 的关闭）后，就可以调用这个方法处理剩余的数据，当然你也可以忽略调剩余的数据。同样的，一般情况下，我们只需要继承适配器ProtocolDecoderAdapter，关注decode()方法即可。但前面说过解码器相对编码器来说，最麻烦的是数据发送过来的规模，以聊天室为例，一个TCP 连接建立之后，那么隔一段时间就会有聊天内容发送过来，也就是decode()方法会被往复调用，这样处理起来就会非常麻烦。那么Mina 中幸好提供了CumulativeProtocolDecoder类，从名字上可以看出累积性的协议解码器，也就是说只要有数据发送过来，这个类就会去读取数据，然后累积到内部的IoBuffer 缓冲区，但是具体的拆包（把累积到缓冲区的数据解码为JAVA 对象）交由子类的doDecode()方法完成，实际上CumulativeProtocolDecoder就是在decode()反复的调用暴漏给子类实现的doDecode()方法。
+具体执行过程如下所示：
+1. 你的doDecode()方法返回true 时，CumulativeProtocolDecoder 的decode()方法会首先判断你是否在doDecode()方法中从内部的IoBuffer 缓冲区读取了数据，如果没有，则会抛出非法的状态异常，也就是你的doDecode()方法返回true 就表示你已经消费了本次数据（相当于聊天室中一个完整的消息已经读取完毕），进一步说，也就是此时你必须已经消费过内部的IoBuffer 缓冲区的数据（哪怕是消费了一个字节的数据）。如果验证过通过，那么CumulativeProtocolDecoder 会检查缓冲区内是否还有数据未读取，如果有就继续调用doDecode()方法，没有就停止对doDecode()方法的调用，直到有新的数据被缓冲。
+2. 当你的doDecode()方法返回false 时，CumulativeProtocolDecoder 会停止对doDecode()方法的调用，但此时如果本次数据还有未读取完的，就将含有剩余数据的IoBuffer 缓冲区保存到IoSession 中，以便下一次数据到来时可以从IoSession 中提取合并。如果发现本次数据全都读取完毕，则清空IoBuffer 缓冲区。简而言之，当你认为读取到的数据已经够解码了，那么就返回true，否则就返回false。这个CumulativeProtocolDecoder 其实最重要的工作就是帮你完成了数据的累积，因为这个工作是很烦琐的。
+
+
 
 ---
+
+
 
 ## 多路分离的解码器：
 
