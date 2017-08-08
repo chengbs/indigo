@@ -583,7 +583,93 @@ public class CmccSipcEncoder extends ProtocolEncoderAdapter {
 1. 你的doDecode()方法返回true 时，CumulativeProtocolDecoder 的decode()方法会首先判断你是否在doDecode()方法中从内部的IoBuffer 缓冲区读取了数据，如果没有，则会抛出非法的状态异常，也就是你的doDecode()方法返回true 就表示你已经消费了本次数据（相当于聊天室中一个完整的消息已经读取完毕），进一步说，也就是此时你必须已经消费过内部的IoBuffer 缓冲区的数据（哪怕是消费了一个字节的数据）。如果验证过通过，那么CumulativeProtocolDecoder 会检查缓冲区内是否还有数据未读取，如果有就继续调用doDecode()方法，没有就停止对doDecode()方法的调用，直到有新的数据被缓冲。
 2. 当你的doDecode()方法返回false 时，CumulativeProtocolDecoder 会停止对doDecode()方法的调用，但此时如果本次数据还有未读取完的，就将含有剩余数据的IoBuffer 缓冲区保存到IoSession 中，以便下一次数据到来时可以从IoSession 中提取合并。如果发现本次数据全都读取完毕，则清空IoBuffer 缓冲区。简而言之，当你认为读取到的数据已经够解码了，那么就返回true，否则就返回false。这个CumulativeProtocolDecoder 其实最重要的工作就是帮你完成了数据的累积，因为这个工作是很烦琐的。
 
+{% endhighlight java%}
+public class CmccSipcDecoder extends CumulativeProtocolDecoder {
+    private final Charset charset;
 
+    public CmccSipcDecoder(Charset charset) {
+        this.charset = charset;
+    }
+
+    @Override
+    protected boolean doDecode(IoSession session, IoBuffer in,
+        ProtocolDecoderOutput out) throws Exception {
+        IoBuffer buffer = IoBuffer.allocate(100).setAutoExpand(true);
+        CharsetDecoder cd = charset.newDecoder();
+        int matchCount = 0;
+        String statusLine = "";
+        String sender = "";
+        String receiver = "";
+        String length = "";
+        String sms = "";
+        int i = 1;
+
+        while (in.hasRemaining()) {
+            byte b = in.get();
+            buffer.put(b);
+
+            if ((b == 10) && (i < 5)) {
+                matchCount++;
+
+                if (i == 1) {
+                    buffer.flip();
+                    statusLine = buffer.getString(matchCount, cd);
+                    statusLine = statusLine.substring(0, statusLine.length() -
+                            1);
+                    matchCount = 0;
+                    buffer.clear();
+                }
+
+                if (i == 2) {
+                    buffer.flip();
+                    sender = buffer.getString(matchCount, cd);
+                    sender = sender.substring(0, sender.length() - 1);
+                    matchCount = 0;
+                    buffer.clear();
+                }
+
+                if (i == 3) {
+                    buffer.flip();
+                    receiver = buffer.getString(matchCount, cd);
+                    receiver = receiver.substring(0, receiver.length() - 1);
+                    matchCount = 0;
+                    buffer.clear();
+                }
+
+                if (i == 4) {
+                    buffer.flip();
+                    length = buffer.getString(matchCount, cd);
+                    length = length.substring(0, length.length() - 1);
+                    matchCount = 0;
+                    buffer.clear();
+                }
+
+                i++;
+            } else if (i == 5) {
+                matchCount++;
+
+                if (matchCount == Long.parseLong(length.split(": ")[1])) {
+                    buffer.flip();
+                    sms = buffer.getString(matchCount, cd);
+                    i++;
+
+                    break;
+                }
+            } else {
+                matchCount++;
+            }
+        }
+
+        SmsObject smsObject = new SmsObject();
+        smsObject.setSender(sender.split(": ")[1]);
+        smsObject.setReceiver(receiver.split(": ")[1]);
+        smsObject.setMessage(sms);
+        out.write(smsObject);
+
+        return false;
+    }
+}
+{% endhighlight %}
 
 ---
 
