@@ -19,9 +19,6 @@ description: Markdown summary with different options
 - [断线重连的方式](#断线重连的方式)
 - [重连目的](#重连目的)
 - [实例](#实例)
-- [Urls](#urls)
-- [Horizontal Rule](#horizontal-rule)
-- [Images](#images)
 - [总结-最佳实践](#总结-最佳实践)
 
 ---
