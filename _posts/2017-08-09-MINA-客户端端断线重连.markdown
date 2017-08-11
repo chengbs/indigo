@@ -34,7 +34,11 @@ description: Markdown summary with different options
 
 1. 在创建Mina客户端时增加一个监听器，或者增加一个拦截器，当检测到Session关闭时，自动进行重连。
 
+![Markdowm Image][2]
+
 2. 在第1种方式的基础上，增加客户端的读写通道空闲检查，当发生Session关闭或者读写空闲时，进行重连。
+
+![Markdowm Image][3]
 
 第一种方式比较传统，优点是简单方便，适合网络稳定、数据量不大（1M带宽以下）的环境；不过缺点是不能对系统级的连接断开阻塞进行捕获。
        
@@ -51,33 +55,38 @@ description: Markdown summary with different options
 创建一个监听器实现mina的IoServiceListener接口，里面的方法可以不用写实现
 
 {% highlight java %}
-import org.apache.mina.core.service.IoService;  
-import org.apache.mina.core.service.IoServiceListener;  
-import org.apache.mina.core.session.IdleStatus;  
-import org.apache.mina.core.session.IoSession;  
-  
-public class IoListener implements IoServiceListener{  
-    @Override  
-    public void serviceActivated(IoService arg0) throws Exception {  
+import org.apache.mina.core.service.IoService;
+import org.apache.mina.core.service.IoServiceListener;
+import org.apache.mina.core.session.IdleStatus;
+import org.apache.mina.core.session.IoSession;
+
+
+public class IoListener implements IoServiceListener {
+    @Override
+    public void serviceActivated(IoService arg0) throws Exception {
         // TODO Auto-generated method stub  
-    }  
-    @Override  
-    public void serviceDeactivated(IoService arg0) throws Exception {  
+    }
+
+    @Override
+    public void serviceDeactivated(IoService arg0) throws Exception {
         // TODO Auto-generated method stub  
-    }  
-    @Override  
-    public void serviceIdle(IoService arg0, IdleStatus arg1) throws Exception {  
+    }
+
+    @Override
+    public void serviceIdle(IoService arg0, IdleStatus arg1)
+        throws Exception {
         // TODO Auto-generated method stub  
-    }  
-    @Override  
-    public void sessionCreated(IoSession arg0) throws Exception {  
+    }
+
+    @Override
+    public void sessionCreated(IoSession arg0) throws Exception {
         // TODO Auto-generated method stub  
-    }  
-  
-    @Override  
-    public void sessionDestroyed(IoSession arg0) throws Exception {  
+    }
+
+    @Override
+    public void sessionDestroyed(IoSession arg0) throws Exception {
         // TODO Auto-generated method stub  
-    }  
+    }
 }
 {% endhighlight %}
 
@@ -85,108 +94,128 @@ public class IoListener implements IoServiceListener{
 
 
 {% highlight java %}
-NioSocketConnector connector = new NioSocketConnector(); // 创建连接客户端
-		connector.setConnectTimeoutMillis(30000); // 设置连接超时
-		connector.getSessionConfig().setReceiveBufferSize(10240); // 设置接收缓冲区的大小
-		connector.getSessionConfig().setSendBufferSize(10240);// 设置输出缓冲区的大小
-		// 加入解码器
-		TextLineCodecFactory factory = new TextLineCodecFactory(Charset.forName("GBK"),
+NioSocketConnector connector = new NioSocketConnector();
+// 创建连接客户端
+connector.setConnectTimeoutMillis(30000);
+// 设置连接超时
+connector.getSessionConfig().setReceiveBufferSize(10240);
+// 设置接收缓冲区的大小
+connector.getSessionConfig().setSendBufferSize(10240);
+// 设置输出缓冲区的大小
+// 加入解码器
+TextLineCodecFactory factory = new TextLineCodecFactory(Charset.forName("GBK"),
 				LineDelimiter.WINDOWS.getValue(), LineDelimiter.WINDOWS.getValue());
-		factory.setDecoderMaxLineLength(10240);
-		factory.setEncoderMaxLineLength(10240);
-		connector.getFilterChain().addLast("codec", new ProtocolCodecFilter(factory));
-		connector.setDefaultRemoteAddress(new InetSocketAddress(host, port));// 设置默认访问地址
-		// 添加处理器
-		connector.setHandler(new IoHandler());
-		// 添加重连监听
-		connector.addListener(new IoListener() {
-			@Override
-			public void sessionDestroyed(IoSession arg0) throws Exception {
-				for (;;) {
-					try {
-						Thread.sleep(3000);
-						ConnectFuture future = connector.connect();
-						future.awaitUninterruptibly();// 等待连接创建成功
-						session = future.getSession();// 获取会话
-						if (session.isConnected()) {
-							logger.info("断线重连[" + connector.getDefaultRemoteAddress().getHostName() + ":"
-									+ connector.getDefaultRemoteAddress().getPort() + "]成功");
-							break;
-						}
-					} catch (Exception ex) {
-						logger.info("重连服务器登录失败,3秒再连接一次:" + ex.getMessage());
-					}
-				}
-			}
-		});
+factory.setDecoderMaxLineLength(10240);
+factory.setEncoderMaxLineLength(10240);
+connector.getFilterChain().addLast("codec", new ProtocolCodecFilter(factory));
+connector.setDefaultRemoteAddress(new InetSocketAddress(host, port));
+// 设置默认访问地址
+// 添加处理器
+connector.setHandler(new IoHandler());
+// 添加重连监听
+connector.addListener(new IoListener() {
+	public void sessionDestroyed(IoSession arg0) throws Exception {
 		for (;;) {
 			try {
+				Thread.sleep(3000);
 				ConnectFuture future = connector.connect();
-				future.awaitUninterruptibly(); // 等待连接创建成功
-				session = future.getSession(); // 获取会话
-				logger.info("连接服务端" + host + ":" + port + "[成功]" + ",,时间:"
-						+ new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
-				break;
-			} catch (RuntimeIoException e) {
-				logger.error("连接服务端" + host + ":" + port + "失败" + ",,时间:"
-						+ new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date())
-						+ ", 连接MSG异常,请检查MSG端口、IP是否正确,MSG服务是否启动,异常内容:" + e.getMessage(), e);
-				Thread.sleep(5000);// 连接失败后,重连间隔5s
+				future.awaitUninterruptibly();
+				// 等待连接创建成功
+				session = future.getSession();
+				// 获取会话
+				if (session.isConnected()) {
+					logger.info("断线重连[" + connector.getDefaultRemoteAddress().getHostName() + ":"
+														+ connector.getDefaultRemoteAddress().getPort() + "]成功");
+					break;
+				}
+			}
+			catch (Exception ex) {
+				logger.info("重连服务器登录失败,3秒再连接一次:" + ex.getMessage());
 			}
 		}
-  
+	}
+}
+);
+for (;;) {
+	try {
+		ConnectFuture future = connector.connect();
+		future.awaitUninterruptibly();
+		// 等待连接创建成功
+		session = future.getSession();
+		// 获取会话
+		logger.info("连接服务端" + host + ":" + port + "[成功]" + ",,时间:"
+								+ new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+		break;
+	}
+	catch (RuntimeIoException e) {
+		logger.error("连接服务端" + host + ":" + port + "失败" + ",,时间:"
+								+ new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date())
+								+ ", 连接MSG异常,请检查MSG端口、IP是否正确,MSG服务是否启动,异常内容:" + e.getMessage(), e);
+		Thread.sleep(5000);
+		// 连接失败后,重连间隔5s
+	}
+}
 {% endhighlight %}
 
 * 拦截器方式
 
 {% highlight java %}
-connector = new NioSocketConnector();  //创建连接客户端  
-        connector.setConnectTimeoutMillis(30000); //设置连接超时  
+connector = new NioSocketConnector();
+//创建连接客户端  
+connector.setConnectTimeoutMillis(30000);
+//设置连接超时  
 //      断线重连回调拦截器  
-        connector.getFilterChain().addFirst("reconnection", new IoFilterAdapter() {  
-            @Override  
-            public void sessionClosed(NextFilter nextFilter, IoSession ioSession) throws Exception {  
-                for(;;){  
-                    try{  
-                        Thread.sleep(3000);  
-                        ConnectFuture future = connector.connect();  
-                        future.awaitUninterruptibly();// 等待连接创建成功  
-                        session = future.getSession();// 获取会话  
-                        if(session.isConnected()){  
-                            logger.info("断线重连["+ connector.getDefaultRemoteAddress().getHostName() +":"+ connector.getDefaultRemoteAddress().getPort()+"]成功");  
-                            break;  
-                        }  
-                    }catch(Exception ex){  
-                        logger.info("重连服务器登录失败,3秒再连接一次:" + ex.getMessage());  
-                    }  
-                }  
-            }  
-        });  
-          
-        TextLineCodecFactory factory = new TextLineCodecFactory(Charset.forName(encoding), LineDelimiter.WINDOWS.getValue(), LineDelimiter.WINDOWS.getValue());  
-        factory.setDecoderMaxLineLength(10240);  
-        factory.setEncoderMaxLineLength(10240);  
-        //加入解码器  
-        connector.getFilterChain().addLast("codec", new ProtocolCodecFilter(factory));  
-        //添加处理器  
-                connector.setHandler(new IoHandler());  
-        connector.getSessionConfig().setReceiveBufferSize(10240);   // 设置接收缓冲区的大小  
-        connector.getSessionConfig().setSendBufferSize(10240);          // 设置输出缓冲区的大小  
-        connector.setDefaultRemoteAddress(new InetSocketAddress(host, port));// 设置默认访问地址  
-        for (;;) {  
-            try {  
-                ConnectFuture future = connector.connect();  
-                // 等待连接创建成功  
-                future.awaitUninterruptibly();  
-                // 获取会话  
-                session = future.getSession();  
-                logger.error("连接服务端" + host + ":" + port + "[成功]" + ",,时间:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));  
-                break;  
-            } catch (RuntimeIoException e) {  
-                logger.error("连接服务端" + host + ":" + port + "失败" + ",,时间:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + ", 连接MSG异常,请检查MSG端口、IP是否正确,MSG服务是否启动,异常内容:" + e.getMessage(), e);  
-                Thread.sleep(5000);// 连接失败后,重连间隔5s  
-            }  
-        }
+connector.getFilterChain().addFirst("reconnection", new IoFilterAdapter() {
+	public void sessionClosed(NextFilter nextFilter, IoSession ioSession) throws Exception {
+		for (;;){
+			try{
+				Thread.sleep(3000);
+				ConnectFuture future = connector.connect();
+				future.awaitUninterruptibly();
+				// 等待连接创建成功  
+				session = future.getSession();
+				// 获取会话  
+				if(session.isConnected()){
+					logger.info("断线重连["+ connector.getDefaultRemoteAddress().getHostName() +":"+ connector.getDefaultRemoteAddress().getPort()+"]成功");
+					break;
+				}
+			}
+			catch(Exception ex){
+				logger.info("重连服务器登录失败,3秒再连接一次:" + ex.getMessage());
+			}
+		}
+	}
+}
+);
+TextLineCodecFactory factory = new TextLineCodecFactory(Charset.forName(encoding), LineDelimiter.WINDOWS.getValue(), LineDelimiter.WINDOWS.getValue());
+factory.setDecoderMaxLineLength(10240);
+factory.setEncoderMaxLineLength(10240);
+//加入解码器  
+connector.getFilterChain().addLast("codec", new ProtocolCodecFilter(factory));
+//添加处理器  
+connector.setHandler(new IoHandler());
+connector.getSessionConfig().setReceiveBufferSize(10240);
+// 设置接收缓冲区的大小  
+connector.getSessionConfig().setSendBufferSize(10240);
+// 设置输出缓冲区的大小  
+connector.setDefaultRemoteAddress(new InetSocketAddress(host, port));
+// 设置默认访问地址  
+for (;;) {
+	try {
+		ConnectFuture future = connector.connect();
+		// 等待连接创建成功  
+		future.awaitUninterruptibly();
+		// 获取会话  
+		session = future.getSession();
+		logger.error("连接服务端" + host + ":" + port + "[成功]" + ",,时间:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+		break;
+	}
+	catch (RuntimeIoException e) {
+		logger.error("连接服务端" + host + ":" + port + "失败" + ",,时间:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + ", 连接MSG异常,请检查MSG端口、IP是否正确,MSG服务是否启动,异常内容:" + e.getMessage(), e);
+		Thread.sleep(5000);
+		// 连接失败后,重连间隔5s
+	}
+}
 {% endhighlight %}
 
 ### 第二种
@@ -194,9 +223,91 @@ connector = new NioSocketConnector();  //创建连接客户端
 空闲检测机制需要在创建客户端时，加入空闲超时，然后在处理器handler端的sessionIdle方法中加入一个预关闭连接的方法。让Session关闭传递到监听器或者拦截器的sessionClose方法中实现重连。
 以拦截器方式为例，在创建客户端时，加入读写通道空闲检查超时机制。
 
+{% highlight java %}
+connector = new NioSocketConnector();
+//创建连接客户端  
+connector.setConnectTimeoutMillis(30000);
+//设置连接超时  
+//      断线重连回调拦截器  
+connector.getFilterChain().addFirst("reconnection", new IoFilterAdapter() {
+	public void sessionClosed(NextFilter nextFilter, IoSession ioSession) throws Exception {
+		for (;;){
+			try{
+				Thread.sleep(3000);
+				ConnectFuture future = connector.connect();
+				future.awaitUninterruptibly();
+				// 等待连接创建成功  
+				session = future.getSession();
+				// 获取会话  
+				if(session.isConnected()){
+					logger.info("断线重连["+ connector.getDefaultRemoteAddress().getHostName() +":"+ connector.getDefaultRemoteAddress().getPort()+"]成功");
+					break;
+				}
+			}
+			catch(Exception ex){
+				logger.info("重连服务器登录失败,3秒再连接一次:" + ex.getMessage());
+			}
+		}
+	}
+}
+);
+connector.getFilterChain().addLast("mdc", new MdcInjectionFilter());
+TextLineCodecFactory factory = new TextLineCodecFactory(Charset.forName(encoding), LineDelimiter.WINDOWS.getValue(), LineDelimiter.WINDOWS.getValue());
+factory.setDecoderMaxLineLength(10240);
+factory.setEncoderMaxLineLength(10240);
+//加入解码器  
+connector.getFilterChain().addLast("codec", new ProtocolCodecFilter(factory));
+connector.getSessionConfig().setReceiveBufferSize(10240);
+// 设置接收缓冲区的大小  
+connector.getSessionConfig().setSendBufferSize(10240);
+// 设置输出缓冲区的大小  
+connector.getSessionConfig().setIdleTime(IdleStatus.BOTH_IDLE, 30000);
+//读写都空闲时间:30秒  
+connector.getSessionConfig().setIdleTime(IdleStatus.READER_IDLE, 40000);
+//读(接收通道)空闲时间:40秒  
+connector.getSessionConfig().setIdleTime(IdleStatus.WRITER_IDLE, 50000);
+//写(发送通道)空闲时间:50秒  
+//添加处理器  
+connector.setHandler(new IoHandler());
+connector.setDefaultRemoteAddress(new InetSocketAddress(host, port));
+// 设置默认访问地址  
+for (;;) {
+	try {
+		ConnectFuture future = connector.connect();
+		// 等待连接创建成功  
+		future.awaitUninterruptibly();
+		// 获取会话  
+		session = future.getSession();
+		logger.error("连接服务端" + host + ":" + port + "[成功]" + ",,时间:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()));
+		break;
+	}
+	catch (RuntimeIoException e) {
+		System.out.println("连接服务端" + host + ":" + port + "失败" + ",,时间:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + ", 连接MSG异常,请检查MSG端口、IP是否正确,MSG服务是否启动,异常内容:" + e.getMessage());
+		logger.error("连接服务端" + host + ":" + port + "失败" + ",,时间:" + new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date()) + ", 连接MSG异常,请检查MSG端口、IP是否正确,MSG服务是否启动,异常内容:" + e.getMessage(), e);
+		Thread.sleep(5000);
+		// 连接失败后,重连10次,间隔30s
+	}
+}
+{% endhighlight %}
 
 然后在数据处理器IoHandler中sessionIdle方法中加入Session会话关闭的代码，这样session关闭就能传递到拦截器或者监听器中，然后实现重连。
 
+{% highlight java %}
+import org.apache.mina.core.service.IoHandlerAdapter;
+import org.apache.mina.core.session.IdleStatus;
+import org.apache.mina.core.session.IoSession;
+public class IoHandler extends IoHandlerAdapter {
+	//部分代码忽略...  
+	@Override  
+	    public void sessionIdle(IoSession session, IdleStatus status) throws Exception {
+		logger.info("-客户端与服务端连接[空闲] - " + status.toString());
+		if(session != null){
+			session.close(true);
+		}
+	}
+	//部分代码忽略...
+}
+{% endhighlight %}
 
 ## 总结-最佳实践
 以上两种方式我个人认为最好是使用第二种。在实际的生产环境，对于数据量比较少的情况下，需要加一个线程专门发送心跳信息，然后在服务器端进行回应心跳，这样就保证读写通道不出现空闲。如果数据量比较大，大到24小时都有数据，那么就不需要心跳线程，可以直接在IoHandler处理器端中messageReceived方法中定时发送心跳到服务器。由于读写监控还可以处理服务器、网络、应用等等方面的不确定因素，所以建议使用第二种方式。
@@ -205,183 +316,11 @@ connector = new NioSocketConnector();  //创建连接客户端
 第二：断线重连是针对客户端的，如果你在服务端使用，可能会有根据场景导致失败。因为服务端会自动发送心跳。
  
 第二：断线重连如果测试设置接收超时情况，就应该一直发送数据，而服务端只接收不发送，心跳数据也不发送，到时间后才会起作用。
-
-## Headings
-
-There are six levels of headings. They correspond with the six levels of HTML headings. You've probably noticed them already in the page. Each level down uses one more hash character. But we are using just 4 of them.
-
-# Headings can be small
-
-## Headings can be small
-
-### Headings can be small
-
-#### Headings can be small
-
-{% highlight raw %}
-# Heading
-## Heading
-### Heading
-#### Heading
-{% endhighlight %}
-
----
-
-## Lists
-
-### Ordered list
-
-1. Item 1
-2. A second item
-3. Number 3
-
-{% highlight raw %}
-1. Item 1
-2. A second item
-3. Number 3
-{% endhighlight %}
-
-### Unordered list
-
-* An item
-* Another item
-* Yet another item
-* And there's more...
-
-{% highlight raw %}
-* An item
-* Another item
-* Yet another item
-* And there's more...
-{% endhighlight %}
-
----
-
-## Paragraph modifiers
-
-### Quote
-
-> Here is a quote. What this is should be self explanatory. Quotes are automatically indented when they are used.
-
-{% highlight raw %}
-> Here is a quote. What this is should be self explanatory.
-{% endhighlight raw %}
-
----
-
-## URLs
-
-URLs can be made in a handful of ways:
-
-* A named link to [Mark It Down][3].
-* Another named link to [Mark It Down](http://markitdown.net/)
-* Sometimes you just want a URL like <http://markitdown.net/>.
-
-{% highlight raw %}
-* A named link to [MarkItDown][3].
-* Another named link to [MarkItDown](http://markitdown.net/)
-* Sometimes you just want a URL like <http://markitdown.net/>.
-{% endhighlight %}
-
----
-
-## Horizontal rule
-
-A horizontal rule is a line that goes across the middle of the page.
-It's sometimes handy for breaking things up.
-
-{% highlight raw %}
----
-{% endhighlight %}
-
----
-
-## Images
-
-Markdown can also contain images. I'll need to add something here sometime.
-
-{% highlight raw %}
-![Markdowm Image][/image/url]
-{% endhighlight %}
-
-![Markdowm Image][6]
-
-*Figure Caption*?
-
-{% highlight raw %}
-![Markdowm Image][/image/url]
-<figcaption class="caption">Photo by John Doe</figcaption>
-{% endhighlight %}
-
-![Markdowm Image][6]
-<figcaption class="caption">Photo by John Doe</figcaption>
-
-*Bigger Images*?
-
-{% highlight raw %}
-![Markdowm Image][/image/url]{: class="bigger-image" }
-{% endhighlight %}
-
-![Markdowm Image][6]{: class="bigger-image" }
-
----
-
-## Code
-
-A HTML Example:
-
-{% highlight html %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Document</title>
-</head>
-<body>
-    <h1>Just a test</h1>
-</body>
-</html>
-{% endhighlight %}
-
-A CSS Example:
-
-{% highlight css %}
-pre {
-    padding: 10px;
-    font-size: .8em;
-    white-space: pre;
-}
-
-pre, table {
-    width: 100%;
-}
-
-code, pre, tt {
-    font-family: Monaco, Consolas, Inconsolata, monospace, sans-serif;
-    background: rgba(0,0,0,.05);
-}
-{% endhighlight %}
-
-A JS Example:
-
-{% highlight js %}
-// Sticky Header
-$(window).scroll(function() {
-
-    if ($(window).scrollTop() > 900 && !$("body").hasClass('show-menu')) {
-        $('#hamburguer__open').fadeOut('fast');
-    } else if (!$("body").hasClass('show-menu')) {
-        $('#hamburguer__open').fadeIn('fast');
-    }
-
-});
-{% endhighlight %}
+ 
 
 [1]: https://chengbs.github.io/indigo/assets/images/upload/eaaa5603-73b7-30aa-b9a6-d1dc7f0f63f6.jpg
-[2]: http://www.fileformat.info/info/unicode/char/2163/index.htm
-[3]: http://www.markitdown.net/
-[4]: http://daringfireball.net/projects/markdown/basics
-[5]: http://daringfireball.net/projects/markdown/syntax
-[6]: http://kune.fr/wp-content/uploads/2013/10/ghost-blog.jpg
+[2]: https://chengbs.github.io/indigo/assets/images/upload/12a1d1af-c2fa-3182-9930-019a4affaf37.jpg
+[3]: https://chengbs.github.io/indigo/assets/images/upload/7b120e9d-cf68-379a-b342-551778fb8b9e.jpg
+ 
 
 http://chwshuang.iteye.com/blog/2028951
