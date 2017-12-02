@@ -127,7 +127,7 @@ public class LongEventMain
 }
 {% endhighlight %}
 
-给多少性能优势的指示可以通过这个技术我们可以改变在onetoone性能测试的生产方式实现。测试运行在i5 Sandy Bridge MacBook Air。
+给多少性能优势的指示可以通过这个技术我们可以改变在[OneToOne performance test](https://github.com/LMAX-Exchange/disruptor/blob/master/src/perftest/java/com/lmax/disruptor/sequenced/OneToOneSequencedThroughputTest.java)性能测试的生产方式实现。测试运行在i5 Sandy Bridge MacBook Air。
 
 ### 多生产者
 
