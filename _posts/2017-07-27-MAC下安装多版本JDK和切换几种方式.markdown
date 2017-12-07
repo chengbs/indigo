@@ -63,8 +63,10 @@ mkdir 1.8
 3. 执行以下命令：
 {% highlight raw %}
 ln -s /Library/Java/JavaVirtualMachines/1.6.0.jdk/Contents/Home/bin ~/.jenv/candidates/java/1.6  
-ln -s /Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/bin ~/.jenv/candidates/java/1.7  
-ln -s /Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/bin ~/.jenv/candidates/java/1.8 
+ln -s /Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/bin ~/.jenv/candidates/java/1.7
+ln -s /Library/Java/JavaVirtualMachines/jdk1.7.0_80.jdk/Contents/Home/lib ~/.jenv/candidates/java/1.7  
+ln -s /Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/bin ~/.jenv/candidates/java/1.8
+ln -s /Library/Java/JavaVirtualMachines/jdk1.8.0_121.jdk/Contents/Home/lib ~/.jenv/candidates/java/1.8 
 {% endhighlight %}
 
 大功告成：
